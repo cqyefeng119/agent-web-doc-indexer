@@ -17,6 +17,7 @@ uv add scrapy
 ```bash
 uv run scrapy runspider crawler.py \
   -a start_url=https://example.com/ \
+  -a deny_patterns='["/release-notes/", "/archive/"]'\
   -a max_depth=2 \
   -a max_pages=200 \
   -a output=site_tree.json
@@ -28,6 +29,14 @@ uv run scrapy runspider crawler.py \
 - `max_depth`: リンクを辿る最大階層
 - `max_pages`: 最大取得ページ数
 - `output`: 出力JSONファイル
+- `deny_patterns`: 除外するURLの正規表現を指定するJSON配列（既定値: `[]`、独自の除外なし）
+
+
+
+いずれかのパターンに一致するリンクを除外します。開始URL自体は除外対象になりません。
+シェルでは配列全体をシングルクォートで囲み、JSON内の文字列にはダブルクォートを使います。
+正規表現のバックスラッシュはJSON内でエスケープします（例: `"\\.pdf$"`）。
+不正なJSON、文字列以外の要素、不正な正規表現は起動時エラーになります。
 
 出力例:
 
@@ -35,14 +44,17 @@ uv run scrapy runspider crawler.py \
 {
   "title": "Root",
   "url": "https://example.com/",
+  "id": "1",
   "children": [
     {
       "title": "Page A",
       "url": "https://example.com/a",
+      "id": "1-1",
       "children": [
         {
           "title": "Page C",
           "url": "https://example.com/c",
+          "id": "1-1-1",
           "children": []
         }
       ]
@@ -50,10 +62,12 @@ uv run scrapy runspider crawler.py \
     {
       "title": "Page B",
       "url": "https://example.com/b",
+      "id": "1-2",
       "children": [
         {
           "title": "Page C",
           "url": "https://example.com/c",
+          "id": "1-2-1",
           "children": []
         }
       ]
@@ -62,6 +76,9 @@ uv run scrapy runspider crawler.py \
 }
 ```
 同じページに複数経路から到達できる場合は、それぞれの枝に同じURLを残します。
+
+各ノードには、Tree上の位置を表す階層IDが付きます。例: `1`, `1-1`, `1-1-1`。
+同じページに複数経路から到達した場合は、経路ごとに異なるIDになります。
 
 
 ## 2. コンセプト
@@ -75,7 +92,7 @@ Web Docs
    ↓
 Scrapyでリンク構造を取得
    ↓
-title / url / children
+id / title / url / children
    ↓
 再帰JSON Tree
    ↓

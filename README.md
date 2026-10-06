@@ -17,6 +17,7 @@ Example:
 ```bash
 uv run scrapy runspider crawler.py \
   -a start_url=https://example.com/ \
+  -a deny_patterns='["/release-notes/", "/archive/"]'\
   -a max_depth=2 \
   -a max_pages=200 \
   -a output=site_tree.json
@@ -28,6 +29,14 @@ Main arguments:
 - `max_depth`: Maximum link depth to follow
 - `max_pages`: Maximum number of pages to fetch
 - `output`: Output JSON file
+- `deny_patterns`: JSON array of URL exclusion regexes (default: `[]`, no custom exclusions)
+
+
+
+Links matching any pattern are excluded. The starting URL itself is not filtered.
+Use single quotes around the JSON array in the shell and double quotes for its strings.
+Regex backslashes must be escaped in JSON (for example, `"\\.pdf$"`).
+Malformed JSON, non-string elements, and invalid regexes cause a startup error.
 
 Example output:
 
@@ -35,14 +44,17 @@ Example output:
 {
   "title": "Root",
   "url": "https://example.com/",
+  "id": "1",
   "children": [
     {
       "title": "Page A",
       "url": "https://example.com/a",
+      "id": "1-1",
       "children": [
         {
           "title": "Page C",
           "url": "https://example.com/c",
+          "id": "1-1-1",
           "children": []
         }
       ]
@@ -50,10 +62,12 @@ Example output:
     {
       "title": "Page B",
       "url": "https://example.com/b",
+      "id": "1-2",
       "children": [
         {
           "title": "Page C",
           "url": "https://example.com/c",
+          "id": "1-2-1",
           "children": []
         }
       ]
@@ -61,7 +75,9 @@ Example output:
   ]
 }
 ```
-If the same page can be reached through multiple paths, the same URL is kept in each branch.
+Each node has a hierarchical `id` based on its position in the tree, such as `1`, `1-1`, and `1-1-1`.
+
+If the same page can be reached through multiple paths, the same URL is kept in each branch with a path-specific `id`.
 
 
 ## 2. Concept
@@ -75,7 +91,7 @@ Web Docs
    ↓
 Scrapy extracts the link structure
    ↓
-title / url / children
+id / title / url / children
    ↓
 Recursive JSON tree
    ↓

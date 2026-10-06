@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -28,6 +29,7 @@ class SiteTreeSpider(scrapy.Spider):
         max_depth=3,
         max_pages=500,
         output="site_tree.json",
+        deny_patterns=None,
         *args,
         **kwargs,
     ):
@@ -43,6 +45,7 @@ class SiteTreeSpider(scrapy.Spider):
         self.max_depth = int(max_depth)
         self.max_pages = int(max_pages)
         self.output = output
+        self.deny_patterns = self.parse_deny_patterns(deny_patterns)
 
         parsed = urlparse(self.root_url)
         self.host = parsed.hostname
@@ -55,9 +58,7 @@ class SiteTreeSpider(scrapy.Spider):
 
         self.link_extractor = LinkExtractor(
             allow_domains=self.allowed_domains,
-            deny=(
-                r"/release-notes/",
-            ),
+            deny=self.deny_patterns,
             unique=True,
         )
 
@@ -71,6 +72,35 @@ class SiteTreeSpider(scrapy.Spider):
         self.link_texts = {}
 
         self.page_count = 0
+
+    @staticmethod
+    def parse_deny_patterns(value):
+        """実行引数のJSON配列、またはPythonのリストを検証する。"""
+        if value is None:
+            return []
+
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    "deny_patterns must be a JSON array of regex strings."
+                ) from exc
+
+        if not isinstance(value, list) or not all(
+            isinstance(pattern, str) for pattern in value
+        ):
+            raise ValueError("deny_patterns must be an array of regex strings.")
+
+        for pattern in value:
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(
+                    f"Invalid regex in deny_patterns: {pattern!r}: {exc}"
+                ) from exc
+
+        return list(value)
 
     @staticmethod
     def normalize_url(url):
@@ -140,7 +170,7 @@ class SiteTreeSpider(scrapy.Spider):
                 },
             )
 
-    def build_tree(self, url, depth=0, path=None):
+    def build_tree(self, url, depth=0, path=None, node_id="1"):
         """
         取得したWebグラフを再帰JSONとして展開。
 
@@ -159,6 +189,7 @@ class SiteTreeSpider(scrapy.Spider):
         )
 
         node = {
+            "id": node_id,
             "title": title,
             "url": url,
             "depth": depth,
@@ -174,12 +205,13 @@ class SiteTreeSpider(scrapy.Spider):
 
         new_path = path | {url}
 
-        for child_url in self.edges.get(url, []):
+        for child_index, child_url in enumerate(self.edges.get(url, []), start=1):
             node["children"].append(
                 self.build_tree(
                     child_url,
                     depth=depth + 1,
                     path=new_path,
+                    node_id=f"{node_id}-{child_index}",
                 )
             )
 
